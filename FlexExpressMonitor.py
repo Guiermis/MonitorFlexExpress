@@ -57,7 +57,6 @@ def execute_code(file_paths, window):
     # Get the elements of the status window
     status_elem = window['_STATUS_']
 
-    # Example code - replace this with your actual code
     time.sleep(2)
     
     status_elem.print('bip bip, carregando seus arquivos :)')
@@ -99,9 +98,6 @@ def execute_code(file_paths, window):
     time.sleep(2)
     
     status_elem.print('bip bop bop. Realizando muitos, MUITOS, cálculos')
-    # Your further processing or calculations here
-    #df.drop(df[df['Categoria'] == 'CAMPANHAS BENEFICENTES SOCIAIS'].index, inplace = True)
-    #df.drop(df[df['Categoria'] == 'CAMPANHAS PARTIDARIAS'].index, inplace = True)
 
     time.sleep(3)
 
@@ -111,7 +107,7 @@ def execute_code(file_paths, window):
 
     time.sleep(3)
 
-    df['INV(000)'] = df['INV(000)'].astype(np.float32)
+    df['INV(000)'] = df['INV(000)'].astype(np.float64)
     df['Inserção'] = df['Inserção'].astype(np.int16)
     df['Ano-Mês'] = df['Ano-Mês'].astype(np.int32)
     df['Praça'] = df['Praça'].astype('category')
@@ -145,8 +141,6 @@ def execute_code(file_paths, window):
     )
 
     df.drop(df[conditions].index, inplace=True)
-
-
 
     #function to extract a value from the row (finding the city name from the prefecture name)
     def extract_value(row):
@@ -769,7 +763,7 @@ def execute_code(file_paths, window):
 
     # Safety check to avoid division by zero
     if maringa_zero != 0:
-        MARdiff = (valorbasMAR - maringa_value) / curitiba_zero
+        MARdiff = (valorbasMAR - maringa_value) / maringa_zero
     else:
         print("No rows match the criteria for adjustment. Check your data and criteria.")
         MARdiff = 0
@@ -868,14 +862,12 @@ def execute_code(file_paths, window):
 
     file_path = create_file_path(save_folder, month_name, result_name)
 
-    df.to_excel(file_path, index=False)    
+    df.to_excel(file_path, index=False)
     time.sleep(2)
 
     try:
     # Open the Excel file using the default application
-    #subprocess.Popen(["open", file_path])  # On macOS
         subprocess.Popen(["start", file_path], shell=True)  # On Windows
-    # subprocess.Popen(["xdg-open", excel_file_path])  # On Linux
 
         status_elem.print(f"Abrindo {file_path} no aplicativo padrao... Sucesso!")
     except FileNotFoundError:
@@ -883,7 +875,7 @@ def execute_code(file_paths, window):
     except Exception as e:
             status_elem.print(f"An error occurred: {e}")
 
-    status_elem.print('YAY terminamos aqui! :3')
+    status_elem.print('bip bip bop terminamos!')
 
 # Layout for the initial file selection window
 layout_file_selection = [
