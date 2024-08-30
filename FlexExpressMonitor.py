@@ -3,10 +3,16 @@ import pandas as pd
 import numpy as np
 import time
 import threading
-import openpyxl
 import subprocess
+import gspread
+from google.oauth2 import service_account
+from openpyxl import load_workbook
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+scopes = ["https://www.googleapis.com/auth/spreadsheets",
+          "https://www.googleapis.com/auth/drive"]
+json_file = "credentials.json"
 
 sg.theme_add_new(
     'NewTheme38029', 
@@ -40,7 +46,6 @@ month_names = {
     10: "Outubro",
     11: "Novembro",
     12: "Dezembro"
-    # ... (Add remaining months)
 }
 
 def get_month_name(month_number):
@@ -52,8 +57,58 @@ def get_month_name(month_number):
 def create_file_path(folder_path, month_name, result_name):
     return Path(folder_path) / f"{month_name}_{result_name}.xlsx"
 
+def write_to_excel(df, file_old, file_path, append_to_file):
+    """
+    Write or append a DataFrame to an Excel file.
+
+    Parameters:
+    df : DataFrame
+        DataFrame to write to the Excel file.
+    file_path : str or Path
+        Path to the Excel file.
+    append_to_file : bool
+        True to append to the file, False to overwrite.
+    """
+    # Check if appending to file
+    if append_to_file:
+        try:
+            # Load the existing workbook
+            book = load_workbook(file_old)
+            writer = pd.ExcelWriter(file_old, engine='openpyxl')
+            writer.book = book
+            writer.sheets = {ws.title: ws for ws in book.worksheets}
+            
+            # Get the last row in the existing sheet
+            startrow = book.active.max_row
+
+            # Write the new data after the last row
+            df.to_excel(writer, index=False, header=False, startrow=startrow)
+            writer.save()
+            writer.close()
+        except FileNotFoundError:
+            # If file does not exist, write a new file
+            df.to_excel(file_path, index=False)
+    else:
+        # Write a new file
+        df.to_excel(file_path, index=False)
+
+def open_file(file_path):
+    try:
+        subprocess.Popen(["start", file_path], shell=True)  # On Windows
+        return f"Opening {file_path} in the default application... Success!"
+    except FileNotFoundError:
+        return f"Error: File '{file_path}' not found."
+    except Exception as e:
+        return f"An error occurred: {e}"
+
+def login():
+    credentials = service_account.Credentials.from_service_account_file(json_file)
+    scoped_credentials = credentials.with_scopes(scopes)
+    gc = gspread.authorize(scoped_credentials)
+    return gc
+
 # Function that performs the main code execution and updates status
-def execute_code(file_paths, window):
+def execute_code(file_paths, window, append_to_file, gc):
     # Get the elements of the status window
     status_elem = window['_STATUS_']
 
@@ -74,12 +129,7 @@ def execute_code(file_paths, window):
             'kwargs': {'skiprows': 6}
         },
         {
-            'file_path': f'{file_paths[1]}',
-            'kwargs': {'usecols': ['Contato', 'Emp. Venda', 'Cliente',
-                                    'Valor Líquido', 'Exibição', 'Mês']}
-        },
-        {
-            'file_path': f'{file_paths[2]}'
+            'file_path': f'{file_paths[1]}'
         }
     ]
 
@@ -90,16 +140,30 @@ def execute_code(file_paths, window):
 
     # Results will contain loaded DataFrames for each Excel file
     # You can access them from the results list
-    df, Bdf, Cdf = results  # Assign loaded DataFrames to variables
+    df, Cdf = results  # Assign loaded DataFrames to variables
 
     df = df.iloc[:-1]
 
-    print(df)
+    gc = login()
+    planilha = gc.open("BASQUETE")
+    aba = planilha.worksheet("2024")
+    dados = aba.get_all_records()
+    Bdf = pd.DataFrame(dados)
+
+    print(Bdf)
     time.sleep(2)
     
     status_elem.print('bip bop bop. Realizando muitos, MUITOS, cálculos')
 
     time.sleep(3)
+
+    # Strip whitespace while preserving NaN values
+    df['Emissora TV'] = df['Emissora TV'].str.strip()
+    df['Anunciante'] = df['Anunciante'].str.strip()
+    df['Marca'] = df['Marca'].str.strip()
+    df['Agência'] = df['Agência'].str.strip()
+    df['Marca'] = df['Marca'].str.strip()
+    Bdf['Cliente'] = Bdf['Cliente'].str.strip()
 
     #correcting emissora that came with wrong data
     mask = df['Emissora TV'] == 'RECORD'
@@ -107,13 +171,14 @@ def execute_code(file_paths, window):
 
     time.sleep(3)
 
-    df['INV(000)'] = df['INV(000)'].astype(np.float64)
+    df['INV(000)'] = df['INV(000)'].astype(np.float32)
     df['Inserção'] = df['Inserção'].astype(np.int16)
     df['Ano-Mês'] = df['Ano-Mês'].astype(np.int32)
     df['Praça'] = df['Praça'].astype('category')
     df['Emissora TV'] = df['Emissora TV'].astype('category')
     df['Categoria'] = df['Categoria'].astype('category')
     df['Tipo Veiculação'] = df['Tipo Veiculação'].astype('category')
+    Bdf['Mês'] = pd.to_datetime(Bdf['Mês'])
 
     print(df.dtypes)
 
@@ -137,7 +202,8 @@ def execute_code(file_paths, window):
         df['Anunciante'].str.contains('TSE') |
         df['Categoria'].str.contains('CAMPANHAS BENEFICIENTES SOCIAIS') |
         df['Categoria'].str.contains('CAMPANHAS PARTIDARIAS') |
-        (df['Marca'].str.contains('BEECON'))
+        (df['Marca'].str.contains('BEECON')) |
+        (df['Marca'].str.contains('TOPVIEW'))
     )
 
     df.drop(df[conditions].index, inplace=True)
@@ -182,7 +248,9 @@ def execute_code(file_paths, window):
         df['Marca'].str.contains('PEDROSO', na=False) |
         (df['Anunciante'] == 'ALTHAIA') |
         (df['Marca'].str.contains('ORAL UNIC', na=False)) & (df['Praça'].str.contains('CURITIBA', na=False)) |
-        (df['Anunciante'] == 'LIGGA TELECOM')
+        (df['Anunciante'] == 'LIGGA TELECOM') |
+        df['Marca'].str.contains('CARRERA CARNEIRO', na=False) |
+        (df['Marca'].str.contains('ORAL SIN', na=False)) & (df['Praça'].str.contains('CURITIBA', na=False))
     )
     clients_cascavel = (
         (df['Marca'].str.contains('IMPACTO PRIME', na=False)) & (df['Praça'].str.contains('CASCAVEL', na=False)) |    
@@ -395,7 +463,8 @@ def execute_code(file_paths, window):
     df.loc[mask2, 'Valor Líquido Projetado'] = df['Vl Tab (000)'] * (1 - df['Desconto']) * (1 - 0.2)
 
     #Filters the Bdf to better manage memory:
-    condition1 = Bdf['Mês'].dt.month == int(file_paths[3])
+    Bdf['Mês'] = pd.to_datetime(Bdf['Mês'], format='%m-%Y')
+    condition1 = Bdf['Mês'].dt.month == int(file_paths[2])
     condition2 = Bdf['Exibição'].isin(['CURITIBA', 'LONDRINA', 'TOLEDO', 'MARINGÁ'])
     condition3 = Bdf['Contato'] != 'PERMUTA'
 
@@ -605,6 +674,10 @@ def execute_code(file_paths, window):
         'ITAIPU BINACIONAL (GFP)' : 'ITAIPU',
         'BERTOLDO E PELEGRINO' : 'BERTOLDO & PELEGRINO LTDA - ME',
         'BATISTA & IZEPE LTDA' : 'REDE BOM DIA SUPERMERCADOS',
+        'UNINTER EDUCACIONAL' : 'UNINTER EDUCACIONAL S/A',
+        'VITAO ALIMENTOS' : 'VITAO ALIMENTOS LTDA',
+        'SUPERMERCADOS RIO VERDE' : 'GUSTO E HENRI SUPERMERCADOS LTDA',
+        '' : '',
         
         #PREFEITURAS:
         'PREF MUN CURITIBA (GMP)' : 'MUNICIPIO DE CURITIBA',
@@ -628,21 +701,44 @@ def execute_code(file_paths, window):
             ('CASCAVEL', 'OESTE'): {'Exibição_contains': 'TOLEDO', 'Emp. Venda': 26},
             ('CURITIBA', 'OESTE'): {'Exibição_contains': 'CURITIBA', 'Emp. Venda': 26},
             ('LONDRINA', 'OESTE'): {'Exibição_contains': 'LONDRINA', 'Emp. Venda': 26},
+            #OESTE REDE coverage
+            #('MARINGA', 'OESTE'): {'Exibição_contains': 'REDE', 'Emp. Venda': 26},
+            #('LONDRINA', 'OESTE'): {'Exibição_contains': 'REDE', 'Emp. Venda': 26},
+            #('CASCAVEL', 'OESTE'): {'Exibição_contains': 'REDE', 'Emp. Venda': 26},
+            #('CURITIBA', 'OESTE'): {'Exibição_contains': 'REDE', 'Emp. Venda': 26},
+
             #LON coverage now
             ('LONDRINA', 'LON'): {'Exibição_contains': 'LONDRINA', 'Emp. Venda': 25},
             ('CURITIBA', 'LON'): {'Exibição_contains': 'CURITIBA', 'Emp. Venda': 25},
             ('MARINGA', 'LON'): {'Exibição_contains': 'MARINGÁ', 'Emp. Venda': 25},
             ('CASCAVEL', 'LON'): {'Exibição_contains': 'TOLEDO', 'Emp. Venda': 25},
+            #LON REDE coverage
+            #('LONDRINA', 'LON'): {'Exibição_contains': 'REDE', 'Emp. Venda': 25},
+            #('CURITIBA', 'LON'): {'Exibição_contains': 'REDE', 'Emp. Venda': 25},
+            #('MARINGA', 'LON'): {'Exibição_contains': 'REDE', 'Emp. Venda': 25},
+            #('CASCAVEL', 'LON'): {'Exibição_contains': 'REDE', 'Emp. Venda': 25},
+
             #MAR coverage now
             ('MARINGA', 'MAR'): {'Exibição_contains': 'MARINGÁ', 'Emp. Venda': 24},
             ('CURITIBA', 'MAR'): {'Exibição_contains': 'CURITIBA', 'Emp. Venda': 24},
             ('LONDRINA', 'MAR'): {'Exibição_contains': 'LONDRINA', 'Emp. Venda': 24},
             ('CASCAVEL', 'MAR'): {'Exibição_contains': 'TOLEDO', 'Emp. Venda': 24},
+            #MAR REDE coverage
+            #('MARINGA', 'MAR'): {'Exibição_contains': 'REDE', 'Emp. Venda': 24},
+            #('CURITIBA', 'MAR'): {'Exibição_contains': 'REDE', 'Emp. Venda': 24},
+            #('LONDRINA', 'MAR'): {'Exibição_contains': 'REDE', 'Emp. Venda': 24},
+            #('CASCAVEL', 'MAR'): {'Exibição_contains': 'REDE', 'Emp. Venda': 24},
+
             #CTBA coverage now
             ('CURITIBA', 'CTBA'): {'Exibição_contains': 'CURITIBA', 'Emp. Venda': 23},
             ('LONDRINA', 'CTBA'): {'Exibição_contains': 'LONDRINA', 'Emp. Venda': 23},
             ('MARINGA', 'CTBA'): {'Exibição_contains': 'MARINGÁ', 'Emp. Venda': 23},
-            ('CASCAVEL', 'CTBA'): {'Exibição_contains': 'TOLEDO', 'Emp. Venda': 23}
+            ('CASCAVEL', 'CTBA'): {'Exibição_contains': 'TOLEDO', 'Emp. Venda': 23},
+            #CTBA REDE coverage
+            #('CURITIBA', 'CTBA'): {'Exibição_contains': 'REDE', 'Emp. Venda': 23},
+            #('LONDRINA', 'CTBA'): {'Exibição_contains': 'REDE', 'Emp. Venda': 23},
+            #('MARINGA', 'CTBA'): {'Exibição_contains': 'REDE', 'Emp. Venda': 23},
+            #('CASCAVEL', 'CTBA'): {'Exibição_contains': 'REDE', 'Emp. Venda': 23},
         }
 
         # Extract information from the row
@@ -700,7 +796,7 @@ def execute_code(file_paths, window):
 
     # # Let's make an excel file from this bad boy
         
-    ignore = ['PREF SEDE', 'GOVERNO']
+    ignore = ['PREF SEDE', 'GOVERNO', 'ASSEMBLEIA']
 
     curitiba_zero = df.loc[
         (df['Cobertura'] == 'CTBA') &
@@ -708,6 +804,7 @@ def execute_code(file_paths, window):
         (~df['Mercado'].isin(ignore)) &
         (df['Valor Líquido Projetado'] == 0)
     ]['Valor Líquido Projetado'].count()
+    status_elem.print(f'CWB - A quantidade de linhas não preenchida é: {curitiba_zero}')
 
     curitiba_value = df.loc[
         (df['Cobertura'] == 'CTBA') &
@@ -721,6 +818,7 @@ def execute_code(file_paths, window):
     except ValueError:
         print("O valor digitado não é um número inteiro válido.")
         valorbasCWB = 0  # or handle this as needed
+    status_elem.print(f'O valor de Curitiba é:{valorbasCWB}')
 
     # Safety check to avoid division by zero
     if curitiba_zero != 0:
@@ -747,6 +845,7 @@ def execute_code(file_paths, window):
         (~df['Mercado'].isin(ignore)) &
         (df['Valor Líquido Projetado'] == 0)
     ]['Valor Líquido Projetado'].count()
+    status_elem.print(f'MAR - A quantidade de linhas não preenchida é: {maringa_zero}')
 
     maringa_value = df.loc[
         (df['Cobertura'] == 'MAR') &
@@ -760,6 +859,8 @@ def execute_code(file_paths, window):
     except ValueError:
         print("O valor digitado não é um número inteiro válido.")
         valorbasMAR = 0  # or handle this as needed
+    status_elem.print(f'O valor de Maringá é:{valorbasMAR}')
+
 
     # Safety check to avoid division by zero
     if maringa_zero != 0:
@@ -787,6 +888,7 @@ def execute_code(file_paths, window):
         (~df['Mercado'].isin(ignore)) &
         (df['Valor Líquido Projetado'] == 0)
     ]['Valor Líquido Projetado'].count()
+    status_elem.print(f'LON - A quantidade de linhas não preenchida é: {londrina_zero}')
 
     londrina_value = df.loc[
         (df['Cobertura'] == 'LON') &
@@ -800,6 +902,7 @@ def execute_code(file_paths, window):
     except ValueError:
         print("O valor digitado não é um número inteiro válido.")
         valorbasLON = 0  # or handle this as needed
+    status_elem.print(f'O valor de Londrina é:{valorbasLON}')
 
     # Safety check to avoid division by zero
     if londrina_zero != 0:
@@ -820,13 +923,13 @@ def execute_code(file_paths, window):
     else:
         print("No update was made to 'Valor Líquido Projetado'.")
 
-
     oeste_zero = df.loc[
         (df['Cobertura'] == 'OESTE') &
         (df['Emissora TV'].str.contains('RECORD')) &
         (df['Valor Líquido Projetado'] == 0) &
         (~df['Mercado'].isin(ignore))
     ]['Valor Líquido Projetado'].count()
+    status_elem.print(f'OESTE - A quantidade de linhas não preenchida é: {oeste_zero}')
 
     oeste_value = df.loc[
         (df['Cobertura'] == 'OESTE') &
@@ -840,6 +943,7 @@ def execute_code(file_paths, window):
     except ValueError:
         print("O valor digitado não é um número inteiro válido.")
         valorbasOESTE = 0  # or handle this as needed
+    status_elem.print(f'O valor de Oeste é:{valorbasOESTE}')
 
     # Safety check to avoid division by zero
     if oeste_zero != 0:
@@ -860,9 +964,17 @@ def execute_code(file_paths, window):
     else:
         print("No update was made to 'Valor Líquido Projetado'.")
 
+    # Create or get the file path
     file_path = create_file_path(save_folder, month_name, result_name)
 
-    df.to_excel(file_path, index=False)
+    # Write or append the DataFrame to the Excel file
+    write_to_excel(df, file_old, file_path, append_to_file)
+    
+    time.sleep(2)
+
+    # Attempt to open the Excel file
+    status_message = open_file(file_path)
+    status_elem.print(status_message)
     time.sleep(2)
 
     try:
@@ -881,17 +993,18 @@ def execute_code(file_paths, window):
 layout_file_selection = [
     [sg.Frame('Selecione os Arquivos Excel:', [
         [sg.Text('MonitorFlex'), sg.InputText(key='_FILE1_'), sg.FileBrowse()],
-        [sg.Text('BASQUETE'), sg.InputText(key='_FILE2_'), sg.FileBrowse()],
+        #[sg.Text('BASQUETE'), sg.InputText(key='_FILE2_'), sg.FileBrowse()],
         [sg.Text('COBERTURA'), sg.InputText(key='_FILE3_'), sg.FileBrowse()],
     ])],
     [sg.Frame('Configurações de Salvamento:', [
-        [sg.Text('Selecione a Pasta de Salvamento:'), sg.InputText(key='_SAVE_FOLDER_'), sg.FolderBrowse()],
-        [sg.Checkbox('Adicionar ao arquivo existente?', default=False, key='APPEND'),
+        [sg.Text('Selecione a Pasta de Salvamento:'), sg.InputText(key='_SAVE_FOLDER_', disabled=False), sg.FolderBrowse(key='_SAVE_FOLDER_BROWSE_', disabled=False)],
+        [sg.Checkbox('Adicionar ao arquivo existente?', default=False, key='APPEND', enable_events=True),
          sg.InputText('', key='_APPEND_FILE_', disabled=True), sg.FileBrowse(button_text='Procurar', key='_APPEND_FILE_BROWSE_', target='_APPEND_FILE_', disabled=True)],
         [sg.Text('Digite o nome do resultado:'), sg.InputText(key='resul')]
     ])],
     [sg.Frame('Informações Adicionais:', [
         [sg.Text('Digite o Número do Mês'), sg.InputText(key='month')],
+        [sg.Text('Digite o Ano Desejado'), sg.InputText(key='year')],
         [sg.Text('Digite o valor total de Curitiba:'), sg.InputText(key='CWB')],
         [sg.Text('Digite o valor total de Maringa:'), sg.InputText(key='MAR')],
         [sg.Text('Digite o valor total de Londrina:'), sg.InputText(key='LON')],
@@ -916,17 +1029,31 @@ while True:
 
     if event == sg.WIN_CLOSED:
         break
+
+    # Handle checkbox toggle
+    elif event == 'APPEND':
+        append_to_file = values['APPEND']  # Get the boolean value from the checkbox
+
+        # Enable or disable the file browse field based on checkbox state
+        window_file_selection['_APPEND_FILE_'].update(disabled=not values['APPEND'])
+        window_file_selection['_APPEND_FILE_BROWSE_'].update(disabled=not values['APPEND'])
+        window_file_selection['_SAVE_FOLDER_'].update(disabled= values['APPEND'])
+        window_file_selection['_SAVE_FOLDER_BROWSE_'].update(disabled= values['APPEND'])
+
     elif event == 'Enviar':
 
-        save_folder = values['_SAVE_FOLDER_']
+        save_folder = values['_SAVE_FOLDER_'] 
 
         month_name = get_month_name(int(values['month']))  # Assuming you have a `get_month_name` function
         result_name = values['resul']
+        append_to_file = values['APPEND']
+        file_old = values['_APPEND_FILE_']
+        year_sheet = values['year']
         
 
         file_paths = [
             values['_FILE1_'],
-            values['_FILE2_'],
+            #values['_FILE2_'],
             values['_FILE3_'],
             values['month'],
             values['resul'],
@@ -947,7 +1074,7 @@ while True:
 
         window_status = sg.Window('Status Window', layout_status, finalize=True)
 
-        thread = threading.Thread(target=execute_code, args=(file_paths, window_status))
+        thread = threading.Thread(target=execute_code, args=(file_paths, window_status, append_to_file, file_old))
         thread.daemon = True
         thread.start()
 
@@ -958,4 +1085,4 @@ while True:
         window_status.close()
         break
 
-sg.popup('Program completed!')
+sg.popup('Programa Finalizado!')
