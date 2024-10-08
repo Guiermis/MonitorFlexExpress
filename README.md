@@ -15,7 +15,7 @@ Monitor Flex Express is a Python tool designed to automate data transformation f
 ## Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/username/monitor-flex-express.git
+   git clone https://github.com/Guiermis/MonitorFlexExpress.git
 
 ## Run the code:
 
