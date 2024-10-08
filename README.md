@@ -19,6 +19,6 @@ Monitor Flex Express is a Python tool designed to automate data transformation f
 
 ## Run the code:
 
-    python monitor_flex_express.py
+    python FlexExpressMonitor.py
 - Follow the instructions on the UI, including inserting values and selecting the file.
 - The program will handle the rest automatically, generating your report in no time!
