@@ -111,6 +111,7 @@ def login():
 
 # Function that performs the main code execution and updates status
 def execute_code(file_paths, window, append_to_file, gc):
+
     # Get the elements of the status window
     status_elem = window['_STATUS_']
 
@@ -121,17 +122,36 @@ def execute_code(file_paths, window, append_to_file, gc):
     def load_excel(file_param):
         file_path = file_param['file_path']
         kwargs = file_param.get('kwargs', {})  # Extracting optional loading parameters
-        
-        return pd.read_excel(file_path, **kwargs)
+
+        teste = os.path.splitext(file_path)
+        if teste[1] == '.xlsx':
+            df = pd.read_excel(file_path, **kwargs)
+            print(df)
+
+        elif teste[1] == '.xls':
+            #read the hmtl(xls) file:
+            dfs = pd.read_html(file_path, header=None)
+            df = dfs[1]
+            new_header = df.iloc[-1]
+            print(new_header)
+            df = df[:-1]
+            df.columns = new_header
+            df = df.reset_index(drop=True)
+
+            #pre data treatment:
+            df['INV(000)'] = df['INV(000)'].str.replace('.', '')
+            df['INV(000)'] = df['INV(000)'].str.replace(',', '.')
+            df['Inserção'] = df['Inserção'].str.replace('.', '')
+            df['Inserção'] = df['Inserção'].str.replace(',', '.')
+            print(df)
+
+        return df
 
     # File paths and respective loading parameters for your Excel files
     file_params = [
         {
             'file_path': f'{file_paths[0]}',
             'kwargs': {'skiprows': 6}
-        },
-        {
-            'file_path': f'{file_paths[1]}'
         }
     ]
 
