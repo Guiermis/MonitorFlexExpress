@@ -1075,7 +1075,7 @@ def execute_code(file_paths, window, append_to_file, gc):
 # Layout for the initial file selection window
 layout_file_selection = [
     [sg.Frame('Selecione os Arquivos Excel:', [
-        [sg.Text('MonitorFlex'), sg.InputText(key='_FILE1_'), sg.FileBrowse()],
+        [sg.Text('MonitorFlex'), sg.InputText(key='_FILE1_'), sg.FileBrowse(file_types=[("Arquivos Excel","*.xlsx .xls")])],
         #[sg.Text('BASQUETE'), sg.InputText(key='_FILE2_'), sg.FileBrowse()],
         #[sg.Text('COBERTURA'), sg.InputText(key='_FILE3_'), sg.FileBrowse()],
     ])],
