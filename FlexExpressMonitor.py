@@ -181,13 +181,14 @@ def execute_code(file_paths, window, append_to_file, gc):
 
     time.sleep(3)
 
+    df = df.rename(columns={'Emissora Radio' : 'Emissora TV'})
+
     # Strip whitespace while preserving NaN values
     df['Emissora TV'] = df['Emissora TV'].str.strip()
     df['Anunciante'] = df['Anunciante'].str.strip()
     df['Marca'] = df['Marca'].str.strip()
     df['Agência'] = df['Agência'].str.strip()
     df['Marca'] = df['Marca'].str.strip()
-
 
     #correcting emissora that came with wrong data
     mask = df['Emissora TV'] == 'RECORD'
