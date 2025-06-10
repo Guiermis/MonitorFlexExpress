@@ -1,4 +1,5 @@
-import PySimpleGUI as sg
+import customtkinter as ctk
+from tkinter import filedialog, messagebox
 import pandas as pd
 import numpy as np
 import time
@@ -15,25 +16,6 @@ from pathlib import Path
 scopes = ["https://www.googleapis.com/auth/spreadsheets",
           "https://www.googleapis.com/auth/drive"]
 json_file = "credentials.json"
-
-sg.theme_add_new(
-    'NewTheme38029', 
-    {
-        'BACKGROUND': '#200f21', 
-        'TEXT': '#f638dc', 
-        'INPUT': '#5a3d5c', 
-        'TEXT_INPUT': '#FFFFFF', 
-        'SCROLL': '#5a3d5c', 
-        'BUTTON': ('#FFFFFF', '#382039'), 
-        'PROGRESS': ('#000000', '#000000'), 
-        'BORDER': 0, 
-        'SLIDER_DEPTH': 0, 
-        'PROGRESS_DEPTH': 0, 
-        'COLOR_LIST': ['#200f21', '#382039', '#5a3d5c', '#f638dc'], 
-    }
-)
-sg.theme('NewTheme38029')
-ttk_style = 'vista'
 
 month_names = {
     1: "Janeiro",
@@ -53,6 +35,7 @@ month_names = {
 current_date = datetime.datetime.today()
 current_year = current_date.year
 current_month = current_date.month
+
 def get_month_name(month_number):
     if month_number in month_names:
         return month_names[month_number]
@@ -113,14 +96,8 @@ def login():
     return gc
 
 # Function that performs the main code execution and updates status
-def execute_code(file_paths, window, append_to_file, gc):
-
-    # Get the elements of the status window
-    status_elem = window['_STATUS_']
-
-    time.sleep(2)
-    
-    status_elem.print('bip bip, carregando seus arquivos :)')
+def execute_code(status_textbox, file_paths, append_to_file, file_old, month_name, skip_bdf, basket_vals):
+    status_textbox.insert("end",'bip bip, carregando seus arquivos :) \n')
     # Function to load an Excel file with specific parameters
     def load_excel(file_param):
         file_path = file_param['file_path']
@@ -177,7 +154,7 @@ def execute_code(file_paths, window, append_to_file, gc):
 
     time.sleep(2)
     
-    status_elem.print('bip bop bop. Realizando muitos, MUITOS, cálculos')
+    status_textbox.insert("end", 'bip bop bop. Realizando muitos, MUITOS, cálculos \n')
 
     time.sleep(3)
 
@@ -203,9 +180,6 @@ def execute_code(file_paths, window, append_to_file, gc):
     df['Emissora TV'] = df['Emissora TV'].astype('category')
     df['Categoria'] = df['Categoria'].astype('category')
     df['Tipo Veiculação'] = df['Tipo Veiculação'].astype('category')
-
-
-    print(df.dtypes)
 
     time.sleep(3)
 
@@ -253,8 +227,6 @@ def execute_code(file_paths, window, append_to_file, gc):
     df['Cidade Autorização'] = np.where(df['Anunciante'].str.contains('GOV EST PR (GEP)', 
                                                                       regex=False), 'CURITIBA', df['Cidade Autorização'])
 
-    print(df)
-
     #correcting some clients that came with wrong data
     mask = df['Marca'] == 'MUFFATAO'
     df.loc[mask, 'Anunciante'] = 'PEDRO MUFFATO & CIA LTDA'
@@ -292,7 +264,8 @@ def execute_code(file_paths, window, append_to_file, gc):
         (df['Marca'] == 'MUFFATAO') |
         (df['Marca'] == 'ITAIPU BINACIONAL') |
         (df['Marca'] == 'FOZ TINTAS') |
-        (df['Marca'] == 'UNIPRIME')
+        (df['Marca'] == 'UNIPRIME') |
+        (df['Anunciante'] == 'FRIMESA')
     )
     clients_londrina = (
         df['Anunciante'].str.contains('SUPER MUFFATO', na=False) |
@@ -321,7 +294,7 @@ def execute_code(file_paths, window, append_to_file, gc):
 
     df.reset_index(inplace=True, drop=True)
 
-    status_elem.print('ensinando marmotas a dançarem macarena')
+    status_textbox.insert("end", 'ensinando marmotas a dançarem macarena \n')
 
     #function to determine coverage:
     def determine_coverage(row, Cdf):
@@ -360,7 +333,7 @@ def execute_code(file_paths, window, append_to_file, gc):
     df['Região'] = df['Cidade Autorização'].map(cidade_region_map).fillna('IMPORT')
     df['Mercado'] = df.apply(set_market, axis=1)
 
-    status_elem.print('marmotas dançam macarena também')
+    status_textbox.insert("end", 'marmotas dançam macarena também \n')
 
     df['Mercado'] = df['Mercado'].astype('category')
     df['Cobertura'] = df['Cobertura'].astype('category')
@@ -371,7 +344,7 @@ def execute_code(file_paths, window, append_to_file, gc):
 
     if skip_bdf:
 
-        status_elem.print("Vamos montar o relatório de ausentes:")
+        status_textbox.insert("end", "Vamos montar o relatório de ausentes: \n")
         #Create the Pivot Table.            
         Adf = pd.pivot_table(df,values='Vl Tab (000)', index=['Anunciante', 'Marca', 'Agência', 'Categoria', 'UF Autorização', 'Cidade Autorização', 'Cobertura'],columns=['Emissora TV'], aggfunc='sum', fill_value=0, observed=True)            
         Adf['Total'] = Adf.sum(axis=1)            
@@ -379,21 +352,21 @@ def execute_code(file_paths, window, append_to_file, gc):
         #Creates the dataframes filtered by 'Cobertura'            
         # status_elem.print("Criando Relatório PR")            
         Adf_PR = Adf[Adf['Cobertura'] != 'IMPORT']            
-        status_elem.print("Relatório PR Criado. Criando Relatório CWB")            
+        status_textbox.insert("end", "Relatório PR Criado. Criando Relatório CWB \n")            
         Adf_CWB = Adf[Adf['Cobertura'] == 'CTBA']            
-        status_elem.print("Relatório CWB Criado. Criando Relatório LON")            
+        status_textbox.insert("end", "Relatório CWB Criado. Criando Relatório LON \n")            
         Adf_LON = Adf[Adf['Cobertura'] == 'LON']            
-        status_elem.print("Relatório LON Criado. Criando Relatório OESTE")            
+        status_textbox.insert("end", "Relatório LON Criado. Criando Relatório OESTE \n")            
         Adf_OES = Adf[Adf['Cobertura'] == 'OESTE']            
-        status_elem.print("Relatório OESTE Criado. Criando Relatório MAR")            
+        status_textbox.insert("end", "Relatório OESTE Criado. Criando Relatório MAR \n")            
         Adf_MAR = Adf[Adf['Cobertura'] == 'MAR']            
         #Creates a List to drop the Column Cobertura from these DFs            
         dataframes = [Adf, Adf_PR, Adf_CWB, Adf_LON, Adf_OES, Adf_MAR]            
         #Drops the Column from the list            
         dataframes= [Adf.drop(columns='Cobertura', inplace=True) for Adf in dataframes]          
         # Create or get the file path            
-        status_elem.print("Gerando Arquivo Excel")            
-        file_path = create_file_path(save_folder, month_name, result_name)            
+        status_textbox.insert("end", "Gerando Arquivo Excel \n")            
+        file_path = create_file_path(file_paths[4], month_name, file_paths[3])            
         with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:            
         # Save each DataFrame to a separate worksheet                
             Adf.to_excel(writer, sheet_name='GERAL', index=False)               
@@ -403,32 +376,28 @@ def execute_code(file_paths, window, append_to_file, gc):
             Adf_OES.to_excel(writer, sheet_name='OESTE', index=False)               
             Adf_MAR.to_excel(writer, sheet_name='MARINGÁ', index=False)                
             df.to_excel(writer, sheet_name='MENSAL', index=False)          
-            status_elem.print("Finalizado!")
+            status_textbox.insert("end", "Finalizado! \n")
 
         try:
         # Open the Excel file using the default application
             subprocess.Popen(["start", file_path], shell=True)  # On Windows
 
-            status_elem.print(f"Abrindo {file_path} no aplicativo padrao... Sucesso!")
+            status_textbox.insert("end", f"Abrindo {file_path} no aplicativo padrao... Sucesso! \n")
         except FileNotFoundError:
-                status_elem.print(f"Error: File '{file_path}' not found.")
+                status_textbox.insert("end", f"Error: File '{file_path}' not found. \n")
         except Exception as e:
-                status_elem.print(f"An error occurred: {e}")
+                status_textbox.insert("end", f"An error occurred: {e} \n")
 
-        status_elem.print('bip bip bop terminamos!')  
+        status_textbox.insert("end", 'bip bip bop terminamos! \n')  
 
     else:
         gc = login()
-        planilha = gc.open("BASQUETE")
-        aba = planilha.worksheet(f"{year_sheet}")
+        planilha = gc.open("BASQUETE - Galadriel Amastacia")
+        aba = planilha.worksheet(f"{file_paths[1]}")
         dados = aba.get_all_records()
-        Bdf = pd.DataFrame(dados)    
+        Bdf = pd.DataFrame(dados)
         Bdf['Mês'] = pd.to_datetime(Bdf['Mês'])
         Bdf['Cliente'] = Bdf['Cliente'].str.strip()
-
-
-        print(Bdf)        
-        # #### Setting our discounts
 
         def discount_giver(row):
             emissora = row['Emissora TV']
@@ -548,13 +517,11 @@ def execute_code(file_paths, window, append_to_file, gc):
 
         #Filters the Bdf to better manage memory:
         Bdf['Mês'] = pd.to_datetime(Bdf['Mês'], format='%m-%Y')
-        condition1 = Bdf['Mês'].dt.month == int(file_paths[1])
+        condition1 = Bdf['Mês'].dt.month == int(file_paths[2])
         condition2 = Bdf['Exibição'].isin(['CURITIBA', 'LONDRINA', 'TOLEDO', 'MARINGÁ'])
         condition3 = Bdf['Contato'] != 'PERMUTA'
 
         Bdf = Bdf[condition1 & condition2 & condition3]
-
-        print(Bdf)
 
         #Updates values from Governo and Assembleia contacts
         def update_valor_liquido_based_on_contato(row, Bdf, df):
@@ -606,7 +573,7 @@ def execute_code(file_paths, window, append_to_file, gc):
         # Apply the function to each row
         df['Valor Líquido Projetado'] = df.apply(lambda row: update_valor_liquido_based_on_contato(row, Bdf, df), axis=1)
 
-        status_elem.print('blip blip. Extraindo valores de CURITIBA e colocando no seu relatório')
+        status_textbox.insert("end", 'blip blip. Extraindo valores de CURITIBA e colocando no seu relatório \n')
 
         #This is a Dictionary that manually corrects mismatched values based on our findings in the Bdf:
         replace_dict = {
@@ -639,7 +606,6 @@ def execute_code(file_paths, window, append_to_file, gc):
 
         # Use the replace method to replace values in the 'Cliente' column
         Bdf['Cliente'].replace(replace_dict, inplace=True)
-
 
         #now we know that some or most of our clients might have different names than what it's in our df 
         client_mapping = {
@@ -785,44 +751,24 @@ def execute_code(file_paths, window, append_to_file, gc):
                 ('CASCAVEL', 'OESTE'): {'Exibição_contains': 'TOLEDO', 'Emp. Venda': 26},
                 ('CURITIBA', 'OESTE'): {'Exibição_contains': 'CURITIBA', 'Emp. Venda': 26},
                 ('LONDRINA', 'OESTE'): {'Exibição_contains': 'LONDRINA', 'Emp. Venda': 26},
-                #OESTE REDE coverage
-                #('MARINGA', 'OESTE'): {'Exibição_contains': 'REDE', 'Emp. Venda': 26},
-                #('LONDRINA', 'OESTE'): {'Exibição_contains': 'REDE', 'Emp. Venda': 26},
-                #('CASCAVEL', 'OESTE'): {'Exibição_contains': 'REDE', 'Emp. Venda': 26},
-                #('CURITIBA', 'OESTE'): {'Exibição_contains': 'REDE', 'Emp. Venda': 26},
 
                 #LON coverage now
                 ('LONDRINA', 'LON'): {'Exibição_contains': 'LONDRINA', 'Emp. Venda': 25},
                 ('CURITIBA', 'LON'): {'Exibição_contains': 'CURITIBA', 'Emp. Venda': 25},
                 ('MARINGA', 'LON'): {'Exibição_contains': 'MARINGÁ', 'Emp. Venda': 25},
                 ('CASCAVEL', 'LON'): {'Exibição_contains': 'TOLEDO', 'Emp. Venda': 25},
-                #LON REDE coverage
-                #('LONDRINA', 'LON'): {'Exibição_contains': 'REDE', 'Emp. Venda': 25},
-                #('CURITIBA', 'LON'): {'Exibição_contains': 'REDE', 'Emp. Venda': 25},
-                #('MARINGA', 'LON'): {'Exibição_contains': 'REDE', 'Emp. Venda': 25},
-                #('CASCAVEL', 'LON'): {'Exibição_contains': 'REDE', 'Emp. Venda': 25},
 
-                #MAR coverage now
+                #MAR coverage
                 ('MARINGA', 'MAR'): {'Exibição_contains': 'MARINGÁ', 'Emp. Venda': 24},
                 ('CURITIBA', 'MAR'): {'Exibição_contains': 'CURITIBA', 'Emp. Venda': 24},
                 ('LONDRINA', 'MAR'): {'Exibição_contains': 'LONDRINA', 'Emp. Venda': 24},
                 ('CASCAVEL', 'MAR'): {'Exibição_contains': 'TOLEDO', 'Emp. Venda': 24},
-                #MAR REDE coverage
-                #('MARINGA', 'MAR'): {'Exibição_contains': 'REDE', 'Emp. Venda': 24},
-                #('CURITIBA', 'MAR'): {'Exibição_contains': 'REDE', 'Emp. Venda': 24},
-                #('LONDRINA', 'MAR'): {'Exibição_contains': 'REDE', 'Emp. Venda': 24},
-                #('CASCAVEL', 'MAR'): {'Exibição_contains': 'REDE', 'Emp. Venda': 24},
 
-                #CTBA coverage now
+                #CTBA coverage
                 ('CURITIBA', 'CTBA'): {'Exibição_contains': 'CURITIBA', 'Emp. Venda': 23},
                 ('LONDRINA', 'CTBA'): {'Exibição_contains': 'LONDRINA', 'Emp. Venda': 23},
                 ('MARINGA', 'CTBA'): {'Exibição_contains': 'MARINGÁ', 'Emp. Venda': 23},
-                ('CASCAVEL', 'CTBA'): {'Exibição_contains': 'TOLEDO', 'Emp. Venda': 23},
-                #CTBA REDE coverage
-                #('CURITIBA', 'CTBA'): {'Exibição_contains': 'REDE', 'Emp. Venda': 23},
-                #('LONDRINA', 'CTBA'): {'Exibição_contains': 'REDE', 'Emp. Venda': 23},
-                #('MARINGA', 'CTBA'): {'Exibição_contains': 'REDE', 'Emp. Venda': 23},
-                #('CASCAVEL', 'CTBA'): {'Exibição_contains': 'REDE', 'Emp. Venda': 23},
+                ('CASCAVEL', 'CTBA'): {'Exibição_contains': 'TOLEDO', 'Emp. Venda': 23}
             }
 
             # Extract information from the row
@@ -875,10 +821,6 @@ def execute_code(file_paths, window, append_to_file, gc):
 
         # Update 'Valor Líquido Projetado' column
         df['Valor Líquido Projetado'] = df.apply(lambda row: update_valor_liquido(row, client_mapping, Bdf), axis=1)
-
-        print(df)
-
-        # # Let's make an excel file from this bad boy
             
         ignore = ['PREF SEDE', 'GOVERNO', 'ASSEMBLEIA']
 
@@ -888,7 +830,7 @@ def execute_code(file_paths, window, append_to_file, gc):
             (~df['Mercado'].isin(ignore)) &
             (df['Valor Líquido Projetado'] == 0)
         ]['Valor Líquido Projetado'].count()
-        status_elem.print(f'CWB - A quantidade de linhas não preenchida é: {curitiba_zero}')
+        status_textbox.insert("end", f'CWB - A quantidade de linhas não preenchida é: {curitiba_zero} \n')
 
         curitiba_value = df.loc[
             (df['Cobertura'] == 'CTBA') &
@@ -898,11 +840,11 @@ def execute_code(file_paths, window, append_to_file, gc):
         ]['Valor Líquido Projetado'].sum()
 
         try:
-            valorbasCWB = int(basket_values[0])
+            valorbasCWB = float(basket_vals[0])
         except ValueError:
             print("O valor digitado não é um número inteiro válido.")
             valorbasCWB = 0  # or handle this as needed
-        status_elem.print(f'O valor de Curitiba é:{valorbasCWB}')
+        status_textbox.insert("end", f'O valor de Curitiba é:{valorbasCWB} \n')
 
         # Safety check to avoid division by zero
         if curitiba_zero != 0:
@@ -929,7 +871,7 @@ def execute_code(file_paths, window, append_to_file, gc):
             (~df['Mercado'].isin(ignore)) &
             (df['Valor Líquido Projetado'] == 0)
         ]['Valor Líquido Projetado'].count()
-        status_elem.print(f'MAR - A quantidade de linhas não preenchida é: {maringa_zero}')
+        status_textbox.insert("end", f'MAR - A quantidade de linhas não preenchida é: {maringa_zero} \n')
 
         maringa_value = df.loc[
             (df['Cobertura'] == 'MAR') &
@@ -939,11 +881,11 @@ def execute_code(file_paths, window, append_to_file, gc):
         ]['Valor Líquido Projetado'].sum()
 
         try:
-            valorbasMAR = int(basket_values[1])
+            valorbasMAR = float(basket_vals[1])
         except ValueError:
             print("O valor digitado não é um número inteiro válido.")
             valorbasMAR = 0  # or handle this as needed
-        status_elem.print(f'O valor de Maringá é:{valorbasMAR}')
+        status_textbox.insert("end", f'O valor de Maringá é:{valorbasMAR} \n')
 
 
         # Safety check to avoid division by zero
@@ -953,7 +895,7 @@ def execute_code(file_paths, window, append_to_file, gc):
             print("No rows match the criteria for adjustment. Check your data and criteria.")
             MARdiff = 0
 
-        # Only proceed with the update if CWBdiff is calculated successfully (i.e., not dividing by zero)
+        # Only proceed with the update if MARdiff is calculated successfully (i.e., not dividing by zero)
         if MARdiff:
             df.loc[
                 (df['Cobertura'] == 'MAR') &
@@ -972,7 +914,7 @@ def execute_code(file_paths, window, append_to_file, gc):
             (~df['Mercado'].isin(ignore)) &
             (df['Valor Líquido Projetado'] == 0)
         ]['Valor Líquido Projetado'].count()
-        status_elem.print(f'LON - A quantidade de linhas não preenchida é: {londrina_zero}')
+        status_textbox.insert("end", f'LON - A quantidade de linhas não preenchida é: {londrina_zero} \n')
 
         londrina_value = df.loc[
             (df['Cobertura'] == 'LON') &
@@ -982,11 +924,11 @@ def execute_code(file_paths, window, append_to_file, gc):
         ]['Valor Líquido Projetado'].sum()
 
         try:
-            valorbasLON = int(basket_values[2])
+            valorbasLON = float(basket_vals[2])
         except ValueError:
             print("O valor digitado não é um número inteiro válido.")
             valorbasLON = 0  # or handle this as needed
-        status_elem.print(f'O valor de Londrina é:{valorbasLON}')
+        status_textbox.insert("end", f'O valor de Londrina é:{valorbasLON} \n')
 
         # Safety check to avoid division by zero
         if londrina_zero != 0:
@@ -995,7 +937,7 @@ def execute_code(file_paths, window, append_to_file, gc):
             print("No rows match the criteria for adjustment. Check your data and criteria.")
             LONdiff = 0
 
-        # Only proceed with the update if CWBdiff is calculated successfully (i.e., not dividing by zero)
+        # Only proceed with the update if LONdiff is calculated successfully (i.e., not dividing by zero)
         if LONdiff:
             df.loc[
                 (df['Cobertura'] == 'LON') &
@@ -1013,7 +955,7 @@ def execute_code(file_paths, window, append_to_file, gc):
             (df['Valor Líquido Projetado'] == 0) &
             (~df['Mercado'].isin(ignore))
         ]['Valor Líquido Projetado'].count()
-        status_elem.print(f'OESTE - A quantidade de linhas não preenchida é: {oeste_zero}')
+        status_textbox.insert("end", f'OESTE - A quantidade de linhas não preenchida é: {oeste_zero} \n')
 
         oeste_value = df.loc[
             (df['Cobertura'] == 'OESTE') &
@@ -1023,11 +965,11 @@ def execute_code(file_paths, window, append_to_file, gc):
         ]['Valor Líquido Projetado'].sum()
 
         try:
-            valorbasOESTE = int(basket_values[3])
+            valorbasOESTE = float(basket_vals[3])
         except ValueError:
             print("O valor digitado não é um número inteiro válido.")
             valorbasOESTE = 0  # or handle this as needed
-        status_elem.print(f'O valor de Oeste é:{valorbasOESTE}')
+        status_textbox.insert("end", f'O valor de Oeste é:{valorbasOESTE} \n')
 
         # Safety check to avoid division by zero
         if oeste_zero != 0:
@@ -1036,7 +978,7 @@ def execute_code(file_paths, window, append_to_file, gc):
             print("No rows match the criteria for adjustment. Check your data and criteria.")
             OESTEdiff = 0
 
-        # Only proceed with the update if CWBdiff is calculated successfully (i.e., not dividing by zero)
+        # Only proceed with the update if OESdiff is calculated successfully (i.e., not dividing by zero)
         if OESTEdiff:
             df.loc[
                 (df['Cobertura'] == 'OESTE') &
@@ -1049,7 +991,7 @@ def execute_code(file_paths, window, append_to_file, gc):
             print("No update was made to 'Valor Líquido Projetado'.")
 
         # Create or get the file path
-        file_path = create_file_path(save_folder, month_name, result_name)
+        file_path = create_file_path(file_paths[4], month_name, file_paths[3])
 
         # Write or append the DataFrame to the Excel file
         write_to_excel(df, file_old, file_path, append_to_file)
@@ -1058,117 +1000,159 @@ def execute_code(file_paths, window, append_to_file, gc):
 
         # Attempt to open the Excel file
         status_message = open_file(file_path)
-        status_elem.print(status_message)
+        status_textbox.insert("end", status_message)
         time.sleep(2)
 
         try:
         # Open the Excel file using the default application
             subprocess.Popen(["start", file_path], shell=True)  # On Windows
 
-            status_elem.print(f"Abrindo {file_path} no aplicativo padrao... Sucesso!")
+            status_textbox.insert("end", f"Abrindo {file_path} no aplicativo padrao... Sucesso! \n")
         except FileNotFoundError:
-                status_elem.print(f"Error: File '{file_path}' not found.")
+                status_textbox.insert("end", f"Error: File '{file_path}' not found. \n")
         except Exception as e:
-                status_elem.print(f"An error occurred: {e}")
+                status_textbox.insert("end", f"An error occurred: {e} \n")
 
-        status_elem.print('bip bip bop terminamos!')
+        status_textbox.insert("end", 'bip bip bop terminamos! \n')
 
-# Layout for the initial file selection window
-layout_file_selection = [
-    [sg.Frame('Selecione os Arquivos Excel:', [
-        [sg.Text('MonitorFlex'), sg.InputText(key='_FILE1_'), sg.FileBrowse(file_types=[("Arquivos Excel","*.xlsx .xls")])],
-        #[sg.Text('BASQUETE'), sg.InputText(key='_FILE2_'), sg.FileBrowse()],
-        #[sg.Text('COBERTURA'), sg.InputText(key='_FILE3_'), sg.FileBrowse()],
-    ])],
-    [sg.Frame('Configurações de Salvamento:', [
-        [sg.Text('Selecione a Pasta de Salvamento:'), sg.InputText(key='_SAVE_FOLDER_', disabled=False), sg.FolderBrowse(key='_SAVE_FOLDER_BROWSE_', disabled=False)],
-        [sg.Checkbox('Adicionar ao arquivo existente?', default=False, key='APPEND', enable_events=True),
-         sg.InputText('', key='_APPEND_FILE_', disabled=True), sg.FileBrowse(button_text='Procurar', key='_APPEND_FILE_BROWSE_', target='_APPEND_FILE_', disabled=True)],
-        [sg.Text('Digite o nome do resultado:'), sg.InputText(key='resul')]
-    ])],
-    [sg.Frame('Informações Adicionais:', [
-        [sg.Checkbox('Deseja pular os valores de Basquete?', default=False, key='_SKIP-BDF_', enable_events=True)],
-        [sg.Text('Digite o Número do Mês'), sg.InputText(key='month', default_text=current_month)],
-        [sg.Text('Digite o Ano Desejado'), sg.InputText(key='year', default_text=current_year)],
-        [sg.Text('Digite o valor total de Curitiba:'), sg.InputText(key='CWB', default_text=0)],
-        [sg.Text('Digite o valor total de Maringa:'), sg.InputText(key='MAR', default_text=0)],
-        [sg.Text('Digite o valor total de Londrina:'), sg.InputText(key='LON', default_text=0)],
-        [sg.Text('Digite o valor total de Cascavel:'), sg.InputText(key='OES', default_text=0)],
-    ])],
-    [sg.Button('Enviar')]
-]
+ctk.set_appearance_mode("System")
+ctk.set_default_color_theme("blue")
 
-# Layout for the status window
-layout_status = [
-    [sg.Text('Status:')],
-    [sg.Multiline('', size=(60, 15), key='_STATUS_', autoscroll=True)],
-    [sg.Button('Fechar')]
-]
+# Create App window
+class FileSelectionApp(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("Seleção de Arquivos")
+        self.geometry("800x700")
 
-# Create the initial file selection window
-window_file_selection = sg.Window('File Selection', layout_file_selection, ttk_theme=ttk_style)
+        # Variables
+        self.file1_var = ctk.StringVar()
+        self.save_folder_var = ctk.StringVar()
+        self.append_var = ctk.BooleanVar()
+        self.append_file_var = ctk.StringVar()
+        self.resul_name = ctk.StringVar()
+        self.skip_bdf_var = ctk.BooleanVar()
+        self.month_var = ctk.IntVar(value=str(datetime.datetime.now().month))
+        self.year_var = ctk.IntVar(value=str(datetime.datetime.now().year))
+        self.cwb_var = ctk.DoubleVar(value=0.0)
+        self.mar_var = ctk.DoubleVar(value=0.0)
+        self.lon_var = ctk.DoubleVar(value=0.0)
+        self.oes_var = ctk.DoubleVar(value=0.0)
 
-# Event loop to capture user inputs for file selection
-while True:
-    event, values = window_file_selection.read()
+        self.create_widgets()
 
-    if event == sg.WIN_CLOSED:
-        break
+    def create_widgets(self):
+        # Excel File Selection
+        frame1 = ctk.CTkFrame(self)
+        frame1.pack(padx=10, pady=10, fill='x')
 
-    # Handle checkbox toggle
-    elif event == 'APPEND':
-        append_to_file = values['APPEND']  # Get the boolean value from the checkbox
+        ctk.CTkLabel(frame1, text="MonitorFlex:").grid(row=0, column=0, padx=5, pady=5)
+        ctk.CTkEntry(frame1, textvariable=self.file1_var, width=400).grid(row=0, column=1, padx=5)
+        ctk.CTkButton(frame1, text="Procurar", command=self.browse_file1).grid(row=0, column=2)
 
-        # Enable or disable the file browse field based on checkbox state
-        window_file_selection['_APPEND_FILE_'].update(disabled=not values['APPEND'])
-        window_file_selection['_APPEND_FILE_BROWSE_'].update(disabled=not values['APPEND'])
-        window_file_selection['_SAVE_FOLDER_'].update(disabled= values['APPEND'])
-        window_file_selection['_SAVE_FOLDER_BROWSE_'].update(disabled= values['APPEND'])
+        # Save Configs
+        frame2 = ctk.CTkFrame(self)
+        frame2.pack(padx=10, pady=10, fill='x')
 
-    elif event == 'Enviar':
+        ctk.CTkLabel(frame2, text="Pasta de Salvamento:").grid(row=0, column=0, padx=5, pady=5)
+        self.save_folder_entry = ctk.CTkEntry(frame2, textvariable=self.save_folder_var, width=400)
+        self.save_folder_entry.grid(row=0, column=1)
+        self.save_folder_btn = ctk.CTkButton(frame2, text="Procurar", command=self.browse_save_folder)
+        self.save_folder_btn.grid(row=0, column=2)
 
-        save_folder = values['_SAVE_FOLDER_'] 
+        self.append_cb = ctk.CTkCheckBox(frame2, text="Adicionar ao arquivo existente?", variable=self.append_var, command=self.toggle_append)
+        self.append_cb.grid(row=1, column=0, pady=5)
 
-        month_name = get_month_name(int(values['month']))  # Assuming you have a `get_month_name` function
-        result_name = values['resul']
-        append_to_file = values['APPEND']
-        file_old = values['_APPEND_FILE_']
-        year_sheet = values['year']
-        skip_bdf = values['_SKIP-BDF_']
-        
+        self.append_file_entry = ctk.CTkEntry(frame2, textvariable=self.append_file_var, width=400, state="disabled")
+        self.append_file_entry.grid(row=1, column=1)
+        self.append_file_btn = ctk.CTkButton(frame2, text="Procurar", command=self.browse_append_file, state="disabled")
+        self.append_file_btn.grid(row=1, column=2)
 
-        file_paths = [
-            values['_FILE1_'],
-            #values['_FILE2_'],
-            #values['_FILE3_'],
-            values['month'],
-            values['resul'],
-        ]
-        basket_values = [
-            int(values['CWB']),
-            int(values['MAR']),
-            int(values['LON']),
-            int(values['OES']),
-        ]
-        window_file_selection.close()
+        ctk.CTkLabel(frame2, text="Nome do resultado:").grid(row=2, column=0, pady=5)
+        ctk.CTkEntry(frame2, textvariable=self.resul_name).grid(row=2, column=1)
 
-        layout_status = [
-            [sg.Text('Status:')],
-            [sg.Multiline('', size=(60, 15), key='_STATUS_', autoscroll=True)],
-            [sg.Button('Fechar')]
-        ]
+        # Additional Info
+        frame3 = ctk.CTkFrame(self)
+        frame3.pack(padx=10, pady=10, fill='x')
 
-        window_status = sg.Window('Status Window', layout_status, finalize=True)
+        ctk.CTkCheckBox(frame3, text="Pular valores de Basquete?", variable=self.skip_bdf_var).grid(row=0, column=0, columnspan=2)
 
-        thread = threading.Thread(target=execute_code, args=(file_paths, window_status, append_to_file, file_old))
-        thread.daemon = True
+        ctk.CTkLabel(frame3, text="Número do Mês:").grid(row=1, column=0, pady=5)
+        ctk.CTkEntry(frame3, textvariable=self.month_var).grid(row=1, column=1)
+
+        ctk.CTkLabel(frame3, text="Ano Desejado:").grid(row=2, column=0, pady=5)
+        ctk.CTkEntry(frame3, textvariable=self.year_var).grid(row=2, column=1)
+
+        cities = [('Curitiba', self.cwb_var), ('Maringa', self.mar_var), ('Londrina', self.lon_var), ('Cascavel', self.oes_var)]
+        for i, (name, var) in enumerate(cities):
+            ctk.CTkLabel(frame3, text=f"Total de {name}:").grid(row=3 + i, column=0, pady=5)
+            ctk.CTkEntry(frame3, textvariable=var).grid(row=3 + i, column=1)
+
+        ctk.CTkButton(self, text="Enviar", command=self.send).pack(pady=10)
+
+    def browse_file1(self):
+        file = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
+        if file:
+            self.file1_var.set(file)
+
+    def browse_save_folder(self):
+        folder = filedialog.askdirectory()
+        if folder:
+            self.save_folder_var.set(folder)
+
+    def browse_append_file(self):
+        file = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.xls")])
+        if file:
+            self.append_file_var.set(file)
+
+    def toggle_append(self):
+        if self.append_var.get():
+            self.append_file_entry.configure(state="normal")
+            self.append_file_btn.configure(state="normal")
+            self.save_folder_entry.configure(state="disabled")
+            self.save_folder_btn.configure(state="disabled")
+        else:
+            self.append_file_entry.configure(state="disabled")
+            self.append_file_btn.configure(state="disabled")
+            self.save_folder_entry.configure(state="normal")
+            self.save_folder_btn.configure(state="normal")
+
+    def send(self):
+        file_paths = [self.file1_var.get(), self.year_var.get(), self.month_var.get(), self.resul_name.get(), self.save_folder_var.get()]
+        append = self.append_var.get()
+        file_old = self.append_file_var.get()
+        skip_bdf = self.skip_bdf_var.get()
+        month_name = get_month_name(self.month_var.get())
+
+        try:
+            basket_vals = list(map(float, [
+                self.cwb_var.get(),
+                self.mar_var.get(),
+                self.lon_var.get(),
+                self.oes_var.get()
+            ]))
+        except ValueError:
+            messagebox.showerror("Erro", "Todos os valores devem ser numéricos.")
+            return
+
+        self.status_window = StatusWindow(file_paths, append, file_old, month_name, skip_bdf, basket_vals)
+        self.status_window.mainloop()
+
+# Status Window class
+class StatusWindow(ctk.CTk):
+    def __init__(self, file_paths, append_to_file, file_old, month_name, skip_bdf, basket_vals):
+        super().__init__()
+        self.title("Status")
+        self.geometry("500x300")
+
+        self.status_textbox = ctk.CTkTextbox(self, width=480, height=200)
+        self.status_textbox.pack(pady=10)
+
+        ctk.CTkButton(self, text="Fechar", command=self.destroy).pack(pady=5)
+
+        thread = threading.Thread(target=execute_code, args=( self.status_textbox, file_paths, append_to_file, file_old, month_name, skip_bdf, basket_vals))
         thread.start()
 
-        while True:
-            event_status, values_status = window_status.read()
-            if event_status == sg.WIN_CLOSED or event_status == 'Fechar':
-                break
-        window_status.close()
-        break
-
-sg.popup('Programa Finalizado!')
+if __name__ == "__main__":
+    app = FileSelectionApp()
+    app.mainloop()
