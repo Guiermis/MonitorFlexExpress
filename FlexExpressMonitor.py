@@ -308,11 +308,25 @@ def execute_code(status_textbox, file_paths, append_to_file, file_old, month_nam
     #function to determine our coverage region:
     cidade_region_map = dict(zip(Cdf['Municipio'], Cdf['Região']))
 
+    planilha = gc.open("MERCADO TV CLIENTES AJUSTES DIRETORIA")
+    aba = planilha.worksheet("CURITIBA")
+    dados = aba.get_all_records()
+    market_cwb = pd.DataFrame(dados)
+
+    market_cwb['ANUNCIANTE'] = market_cwb['ANUNCIANTE'].str.strip()
+
+    print(market_cwb)
+
     #function to determine our market:
     def set_market(row):
         UF = row['UF Autorização']
         anunciante = row['Anunciante'].upper()
         cidade_autorizacao = row['Cidade Autorização'].upper()
+
+        if UF == 'PARANA' and 'PREF' not in anunciante and anunciante not in market_cwb['ANUNCIANTE'].str.upper().values:
+            return 'LOCAL'
+        elif UF != 'PARANA':
+            return 'IMPORT'
 
         if 'PREF' in anunciante and (cidade_autorizacao in ['CURITIBA', 'MARINGA', 'CASCAVEL', 
                                                             'TOLEDO', 'FOZ DO IGUACU', 'LONDRINA']):
@@ -326,7 +340,11 @@ def execute_code(status_textbox, file_paths, append_to_file, file_old, month_nam
         elif 'ASSEMBLEIA' in anunciante:
             return 'ASSEMBLEIA'
         
-        return 'LOCAL' if UF == 'PARANA' else 'IMPORT'
+        # Handle the market_cwb case more robustly
+        matches = market_cwb[market_cwb['ANUNCIANTE'].str.upper() == anunciante]
+        if not matches.empty:
+            # Take the first match if there are multiple
+            return matches.iloc[0]['MERCADO']
 
     #fill some of our Columns:
     df['Cobertura'] = df.apply(determine_coverage, args=(Cdf,), axis=1)
@@ -346,7 +364,7 @@ def execute_code(status_textbox, file_paths, append_to_file, file_old, month_nam
 
         status_textbox.insert("end", "Vamos montar o relatório de ausentes: \n")
         #Create the Pivot Table.            
-        Adf = pd.pivot_table(df,values='Vl Tab (000)', index=['Anunciante', 'Marca', 'Agência', 'Categoria', 'UF Autorização', 'Cidade Autorização', 'Cobertura'],columns=['Emissora TV'], aggfunc='sum', fill_value=0, observed=True)            
+        Adf = pd.pivot_table(df,values='Vl Tab (000)', index=['Anunciante', 'Marca', 'Agência', 'Categoria', 'UF Autorização', 'Cidade Autorização', 'Cobertura', 'Mercado'],columns=['Emissora TV'], aggfunc='sum', fill_value=0, observed=True)            
         Adf['Total'] = Adf.sum(axis=1)            
         Adf = Adf.reset_index()             
         #Creates the dataframes filtered by 'Cobertura'            
@@ -391,7 +409,6 @@ def execute_code(status_textbox, file_paths, append_to_file, file_old, month_nam
         status_textbox.insert("end", 'bip bip bop terminamos! \n')  
 
     else:
-        gc = login()
         planilha = gc.open("BASQUETE - Galadriel Amastacia")
         aba = planilha.worksheet(f"{file_paths[1]}")
         dados = aba.get_all_records()
